@@ -4,8 +4,8 @@
 
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:4000', // Node
-  // apiUrl: 'http://localhost:8080', // Spring
+  // apiUrl: 'http://localhost:4000', // Node
+  apiUrl: 'http://localhost:8080', // Spring
   // apiUrl: 'http://localhost:3001', // JSON
   todoUri: 'todos',
 };

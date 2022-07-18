@@ -23,6 +23,12 @@
       "dom"
     ],
     "paths": {
+      "~model/*": [
+        "src/app/model/*"
+      ],
+      "~model": [
+        "src/app/model"
+      ],
       "~core/environment": [
         "src/environments/environment"
       ],
@@ -31,6 +37,9 @@
       ],
       "~core/util": [
         "src/app/core/services/util"
+      ],
+      "~core/websocket": [
+        "src/app/core/websocket"
       ],
       "~core/store": [
         "src/app/core/services/store"

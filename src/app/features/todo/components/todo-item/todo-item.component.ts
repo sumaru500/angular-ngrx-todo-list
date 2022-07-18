@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { Todo, toBoolean, OnOFF } from '../../models';
+import { Todo, toBoolean, OnOFF } from '~model/todo';
 
 @Component({
   selector: 'app-todo-item',

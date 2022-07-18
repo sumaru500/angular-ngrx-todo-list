@@ -2,17 +2,59 @@ import { Injectable } from '@angular/core';
 import { forkJoin, from, Observable } from 'rxjs';
 import {map, tap, delay} from 'rxjs/operators';
 import {HttpClient} from '@angular/common/http';
-import { IDType, Todo } from '../models';
+import { IDType, SocketDataType, DELETE_TODO, Todo } from '~model/todo';
 import { environment } from '~core/environment';
 // import { APIData } from '~core/api';
+import { Store } from '~core/store';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TodoService {
 
-  constructor(private http : HttpClient) { }
+  constructor(private http : HttpClient, private store: Store) {
 
+    // subcribe topic for web socket
+    this.store.getClientSocket().on('todos', (data: SocketDataType) => {
+      console.log('Received data:', data);
+
+      if (data.type === DELETE_TODO) {
+        // do not call API, just remove item from store
+        const todos = this.store.selectSnapshot("todos");
+        const newTodos = todos?.filter(todo => todo.id !== data.id);
+        this.store.update({todos: newTodos});
+      }
+      else { // insert or update notified from backend
+        // must call async API
+        this.getTodo({id: data.id})
+        .subscribe(returnTodo => {
+          const todos = this.store.selectSnapshot("todos") || [];
+          let index = todos.findIndex(todo => todo.id == data.id);
+          if (index === -1) { // insert
+            todos.push(returnTodo);
+            this.store.update({todos});
+          }
+          else { // update
+            todos[index] = returnTodo;
+            this.store.update({todos});
+          }
+        })
+      }
+    });
+  }
+
+  /**
+   * Get a todo by id from the API
+   */
+  getTodo(todo: Todo ): Observable<Todo> {
+
+    const getTodoUrl = `${environment.apiUrl}/${environment.todoUri}/${todo.id}`;
+    console.log(getTodoUrl);
+    return this.http.get<Todo>(getTodoUrl).pipe(
+      delay(1000),
+      tap(data => console.log(data))
+    );
+  }
   /**
    * Get a list of todos from the API
    */

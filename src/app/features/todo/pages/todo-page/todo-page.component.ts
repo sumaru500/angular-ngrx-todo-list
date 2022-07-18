@@ -3,7 +3,8 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import { BehaviorSubject, finalize, Observable } from 'rxjs';
 import {FilterType, TodoFilterNames} from '../../constants'
 import {TodoFilters} from '../../filters'
-import { Todo } from '../../models';
+import { Todo } from '~model/todo';
+import { Store } from '~core/store';
 import { TodoService } from '../../services/todo.service';
 
 @Component({
@@ -13,7 +14,7 @@ import { TodoService } from '../../services/todo.service';
     <app-header (onAddTodo)="handleAddTodo($event)"></app-header>
 			<!-- This section should be hidden by default and shown when there are todos -->
 			<section class="main">
-        <app-todo-list *ngIf="(getTodos() | async) as todos" [todos]="todos.filter(filters[filter])"
+        <app-todo-list *ngIf="(todos$ | async) as todos" [todos]="todos.filter(filters[filter])"
           (onToggleTodo)="handleToggleTodo($event)"
           (onEditTodo)="handleEditTodo($event)"
           (onRemoveTodo)="handleRemoveTodo($event)"
@@ -27,8 +28,8 @@ import { TodoService } from '../../services/todo.service';
        <!-- </ng-template> -->
       </section>
       <app-footer
-        [leftItemsCount]="(getTodos() | async)?.filter(filters[filterNames.ACTIVE])?.length || 0"
-        [completedItemsCount]="(getTodos() | async)?.filter(filters[filterNames.COMPLETED])?.length || 0"
+        [leftItemsCount]="(todos$ | async)?.filter(filters[filterNames.ACTIVE])?.length || 0"
+        [completedItemsCount]="(todos$ | async)?.filter(filters[filterNames.COMPLETED])?.length || 0"
         [filter]="filter"
         (onFilterTodo)="handleFilterTodo($event)"
         (onClearCompletedTodo)="handleClearTodo($event)"
@@ -44,22 +45,29 @@ export class TodoPageComponent implements OnInit {
   public isLoadingTodos = false;
   public leftItemsCount = 0;
   public filter : FilterType = this.filterNames.ALL;
-  private todosSubject : BehaviorSubject<Todo[]> = new BehaviorSubject([] as Todo[]);
+  // private todosSubject : BehaviorSubject<Todo[]> = new BehaviorSubject([] as Todo[]);
+  public todos$?: Observable<Todo[]>;
 
-  constructor(private service: TodoService,
+  constructor(private store: Store,
+              private service: TodoService,
               private snackbar: MatSnackBar) { }
 
   ngOnInit(): void {
+    this.todos$ = this.store.select('todos');
+    // init todos
     this.isLoadingTodos = true;
     this.service.getTodos().pipe(
       finalize(() => this.isLoadingTodos = false)
     )
-    .subscribe((todos) => this.todosSubject.next(todos));
+    .subscribe(
+      // (todos) => this.todosSubject.next(todos)
+      (todos) => this.store.update({todos})
+    );
   }
 
-  getTodos(): Observable<Todo[]> {
-    return this.todosSubject.asObservable();
-  }
+  // getTodos(): Observable<Todo[]> {
+  //   return this.todosSubject.asObservable();
+  // }
 
   /**
    * add a new todo
@@ -72,9 +80,9 @@ export class TodoPageComponent implements OnInit {
     })
     .subscribe(returnTodo => {
       if (returnTodo) {
-        const todos = this.todosSubject.getValue();
-        todos.push(returnTodo);
-        this.todosSubject.next([...todos]); // or using _.cloneDeep()
+        const todos = this.store.selectSnapshot('todos');
+        todos?.push(returnTodo);
+        this.store.update({todos}); // or using _.cloneDeep()
         this.snackbar.open(`Todo ${title} added successfully`, undefined, {duration: 2000});
       }
     });
@@ -84,11 +92,11 @@ export class TodoPageComponent implements OnInit {
     console.log('Toggle Todo', id, completed);
     this.service.updateTodo({id, completed})
     .subscribe(returnTodo => {
-      const todos = this.todosSubject.getValue();
-      const toggleTodo = todos.find(todo => todo.id === id);
+      const todos = this.store.selectSnapshot('todos');
+      const toggleTodo = todos?.find(todo => todo.id === id);
       if (toggleTodo) {
         toggleTodo.completed = completed;
-        this.todosSubject.next([...todos]); // or using _.cloneDeep()
+        this.store.update({todos}); // or using _.cloneDeep()
         this.snackbar.open(`Todo ${toggleTodo.title} toggled successfully`, undefined, {duration: 2000});
       }
     })
@@ -97,11 +105,13 @@ export class TodoPageComponent implements OnInit {
   public handleEditTodo({id, title}: Todo) : void {
     this.service.updateTodo({id, title})
     .subscribe(returnTodo => {
-      const todos = this.todosSubject.getValue();
-      const editedTodo = todos.find(todo => todo.id === id);
+      // const todos = this.todosSubject.getValue();
+      const todos = this.store.selectSnapshot('todos');
+      const editedTodo = todos?.find(todo => todo.id === id);
       if (editedTodo) {
         editedTodo.title = title;
-        this.todosSubject.next([...todos]); // or using _.cloneDeep()
+        // this.todosSubject.next([...todos]); // or using _.cloneDeep()
+        this.store.update({todos}); // or using _.cloneDeep()
         this.snackbar.open(`Todo ${editedTodo.title} update title successfully`, undefined, {duration: 2000});
       }
     })
@@ -110,22 +120,26 @@ export class TodoPageComponent implements OnInit {
   public handleRemoveTodo({id}: Todo) : void {
     this.service.deleteTodo({id})
     .subscribe(returnTodo => {
-      const todos = this.todosSubject.getValue();
-      const removedTodo = todos.filter(todo => todo.id === id)[0];
-      const newTodos = todos.filter(todo => todo.id !== id);
+      // const todos = this.todosSubject.getValue();
+      const todos = this.store.selectSnapshot('todos');
+      const removedTodo = todos?.filter(todo => todo.id === id)[0];
+      const newTodos = todos?.filter(todo => todo.id !== id);
       if (removedTodo) {
-        this.todosSubject.next([...newTodos]); // or using _.cloneDeep()
+        // this.todosSubject.next([...newTodos]); // or using _.cloneDeep()
+        this.store.update({todos}); // or using _.cloneDeep()
         this.snackbar.open(`Todo ${removedTodo.title} removed successfully`, undefined, {duration: 2000});
       }
     })
   }
 
   public handleToggleAllTodo(checkedAll : boolean) : void {
-    const todos = this.todosSubject.getValue();
-    const updateTodos = todos.map(todo => ({ ...todo, completed: checkedAll }));
+    // const todos = this.todosSubject.getValue();
+    const todos = this.store.selectSnapshot('todos') || [];
+    const updateTodos = todos?.map(todo => ({ ...todo, completed: checkedAll }));
     this.service.toggleAllTodo(updateTodos)
     .subscribe(returnTodos => {
-        this.todosSubject.next(updateTodos)
+        // this.todosSubject.next(updateTodos)
+        this.store.update({todos}); // or using _.cloneDeep()
         this.snackbar.open(`Toggle All successfully`, undefined, {duration: 2000});
 
     })
@@ -136,13 +150,15 @@ export class TodoPageComponent implements OnInit {
   }
 
   public handleClearTodo(filter: FilterType ): void {
-    const todos = this.todosSubject.getValue();
+    // const todos = this.todosSubject.getValue();
+    const todos = this.store.selectSnapshot('todos') || [];
     const clearTodos = todos.filter(this.filters[filter]);
     const clearIds = clearTodos.map(clearTodos => clearTodos.id);
-    const restTodos = todos.filter(todo => !clearIds.includes(todo.id));
+    const restTodos = todos.filter(todo => !clearIds.includes(todo.id)) || [];
     this.service.clearTodos(clearTodos)
     .subscribe(returnTodos => {
-        this.todosSubject.next([...restTodos])
+        // this.todosSubject.next([...restTodos])
+        this.store.update({todos: restTodos}); // or using _.cloneDeep()
         this.snackbar.open(`Clear successfully`, undefined, {duration: 2000});
 
     })

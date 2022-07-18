@@ -1,5 +1,5 @@
 import { AfterContentInit, ChangeDetectionStrategy, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { Todo } from '../../models';
+import { Todo } from '~model/todo';
 
 @Component({
   selector: 'app-todo-list',
