@@ -1,5 +1,6 @@
 import { AfterContentInit, ChangeDetectionStrategy, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { Todo } from '~model/todo';
+import * as _ from 'lodash';
 
 @Component({
   selector: 'app-todo-list',
@@ -11,7 +12,7 @@ import { Todo } from '~model/todo';
 				<label for="toggle-all">Mark all as complete</label>
 				<ul class="todo-list">
 					<!-- These are here just to show the structure of the list items -->
-          <app-todo-item *ngFor="let todo of todos" [todo]="todo"
+          <app-todo-item *ngFor="let todo of todos" [todo]="cloneDeep(todo)"
             (onToggleTodo)="handleToggleTodo($event)"
             (onEditTodo)="handleEditTodo($event)"
             (onRemoveTodo)="handleRemoveTodo($event)"
@@ -23,6 +24,8 @@ import { Todo } from '~model/todo';
 })
 
 export class TodoListComponent implements AfterContentInit, OnInit {
+  // utility functions
+  public cloneDeep = _.cloneDeep;
 
   @Input() todos: Todo[] = [];
   @Output() onToggleTodo = new EventEmitter();

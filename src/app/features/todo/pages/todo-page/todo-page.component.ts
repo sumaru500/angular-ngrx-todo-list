@@ -1,11 +1,16 @@
 import { Component, OnInit } from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import { BehaviorSubject, finalize, Observable } from 'rxjs';
+import { BehaviorSubject, finalize, Observable, lastValueFrom, take, filter as rxFilter  } from 'rxjs';
 import {FilterType, TodoFilterNames} from '../../constants'
 import {TodoFilters} from '../../filters'
 import { Todo } from '~model/todo';
-import { Store } from '~core/store';
+import { Store } from '@ngrx/store';
 import { TodoService } from '../../services/todo.service';
+import * as TodoSelectors from '../../state/todo.selectors';
+import { State } from '~model';
+import { AsyncStatus, Status } from '~model/common/async.status';
+import {getCurrentValue} from '~core/util';
+import { addTodoAsync, clearCompletedTodoAsync, editEndTodoAsync, fetchTodoAsync, removeTodoAsync, toggleAllTodoAsync, toggleTodoAsync } from '../../state/todo.actions';
 
 @Component({
   selector: 'app-todo-page',
@@ -22,7 +27,7 @@ import { TodoService } from '../../services/todo.service';
           ></app-todo-list>
         <!-- <ng-template *ngIf="isLoadingTodos"> -->
 
-        <div *ngIf="isLoadingTodos" class="center">
+        <div *ngIf="(statusFetch$ | async)?.status === 'loading'" class="center">
           <mat-progress-spinner  mode="indeterminate"></mat-progress-spinner>
         </div>
        <!-- </ng-template> -->
@@ -42,27 +47,27 @@ export class TodoPageComponent implements OnInit {
   public filters =  TodoFilters;
   public filterNames = TodoFilterNames;
 
-  public isLoadingTodos = false;
+  public statusFetch$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusFetch);
+  public statusAdd$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusAdd);
+  public statusRemove$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusRemove);
+  public statusToggle$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusToggle);
+  public statusToggleAll$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusToggleAll);
+  public statusEditEnd$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusEditEnd);
+  public statusClearCompleted$ : Observable<Status> = this.store.select(TodoSelectors.selectStatusClearCompleted);
+
   public leftItemsCount = 0;
   public filter : FilterType = this.filterNames.ALL;
   // private todosSubject : BehaviorSubject<Todo[]> = new BehaviorSubject([] as Todo[]);
-  public todos$?: Observable<Todo[]>;
+  public todos$: Observable<Todo[]> = this.store.select(TodoSelectors.selectAllTodos);;
 
-  constructor(private store: Store,
+  constructor(private store: Store<State>,
               private service: TodoService,
               private snackbar: MatSnackBar) { }
 
   ngOnInit(): void {
-    this.todos$ = this.store.select('todos');
-    // init todos
-    this.isLoadingTodos = true;
-    this.service.getTodos().pipe(
-      finalize(() => this.isLoadingTodos = false)
-    )
-    .subscribe(
-      // (todos) => this.todosSubject.next(todos)
-      (todos) => this.store.update({todos})
-    );
+
+    // init todos by dispatch a request async action
+    this.store.dispatch(fetchTodoAsync.request());
   }
 
   // getTodos(): Observable<Todo[]> {
@@ -74,94 +79,109 @@ export class TodoPageComponent implements OnInit {
    * @param title
    */
   public handleAddTodo(title: string) : void {
-    this.service.addTodo({
+    this.store.dispatch(addTodoAsync.request({todo: {
       title,
       completed : false
-    })
-    .subscribe(returnTodo => {
-      if (returnTodo) {
-        const todos = this.store.selectSnapshot('todos');
-        todos?.push(returnTodo);
-        this.store.update({todos}); // or using _.cloneDeep()
+    }}));
+
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusAdd$.pipe(
+      rxFilter(status => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
         this.snackbar.open(`Todo ${title} added successfully`, undefined, {duration: 2000});
-      }
-    });
+      })
+
   }
 
   public handleToggleTodo({id, completed} : Todo) : void {
     console.log('Toggle Todo', id, completed);
-    this.service.updateTodo({id, completed})
-    .subscribe(returnTodo => {
-      const todos = this.store.selectSnapshot('todos');
-      const toggleTodo = todos?.find(todo => todo.id === id);
-      if (toggleTodo) {
-        toggleTodo.completed = completed;
-        this.store.update({todos}); // or using _.cloneDeep()
-        this.snackbar.open(`Todo ${toggleTodo.title} toggled successfully`, undefined, {duration: 2000});
-      }
-    })
+    this.store.dispatch(toggleTodoAsync.request({todo: {id, completed}}))
+
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusToggle$.pipe(
+      rxFilter(status => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
+        this.snackbar.open(`Todo toggled successfully`, undefined, {duration: 2000});
+      })
+
   }
 
   public handleEditTodo({id, title}: Todo) : void {
-    this.service.updateTodo({id, title})
-    .subscribe(returnTodo => {
-      // const todos = this.todosSubject.getValue();
-      const todos = this.store.selectSnapshot('todos');
-      const editedTodo = todos?.find(todo => todo.id === id);
-      if (editedTodo) {
-        editedTodo.title = title;
-        // this.todosSubject.next([...todos]); // or using _.cloneDeep()
-        this.store.update({todos}); // or using _.cloneDeep()
-        this.snackbar.open(`Todo ${editedTodo.title} update title successfully`, undefined, {duration: 2000});
-      }
-    })
+    this.store.dispatch(editEndTodoAsync.request({todo: {id, title}}))
+
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusEditEnd$.pipe(
+      rxFilter(status => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
+        this.snackbar.open(`Todo ${title} update title successfully`, undefined, {duration: 2000});
+      })
+
   }
 
   public handleRemoveTodo({id}: Todo) : void {
-    this.service.deleteTodo({id})
-    .subscribe(returnTodo => {
-      // const todos = this.todosSubject.getValue();
-      const todos = this.store.selectSnapshot('todos');
-      const removedTodo = todos?.filter(todo => todo.id === id)[0];
-      const newTodos = todos?.filter(todo => todo.id !== id);
-      if (removedTodo) {
-        // this.todosSubject.next([...newTodos]); // or using _.cloneDeep()
-        this.store.update({todos}); // or using _.cloneDeep()
-        this.snackbar.open(`Todo ${removedTodo.title} removed successfully`, undefined, {duration: 2000});
-      }
-    })
+    this.store.dispatch(removeTodoAsync.request({todo: {id}}))
+
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusRemove$.pipe(
+      rxFilter(status => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
+        this.snackbar.open(`Todo removed successfully`, undefined, {duration: 2000});
+      })
+
   }
 
-  public handleToggleAllTodo(checkedAll : boolean) : void {
-    // const todos = this.todosSubject.getValue();
-    const todos = this.store.selectSnapshot('todos') || [];
+  public async handleToggleAllTodo(checkedAll : boolean) {
+    const todos = await lastValueFrom(this.todos$.pipe(take(1))) || []; // get current value in state
     const updateTodos = todos?.map(todo => ({ ...todo, completed: checkedAll }));
-    this.service.toggleAllTodo(updateTodos)
-    .subscribe(returnTodos => {
-        // this.todosSubject.next(updateTodos)
-        this.store.update({todos}); // or using _.cloneDeep()
-        this.snackbar.open(`Toggle All successfully`, undefined, {duration: 2000});
+    this.store.dispatch(toggleAllTodoAsync.request({todos: updateTodos}))
 
-    })
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusToggleAll$.pipe(
+      rxFilter(status => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
+        this.snackbar.open(`Toggle All successfully`, undefined, {duration: 2000});
+      })
+
   }
 
   public handleFilterTodo(filter: FilterType): void {
     this.filter = filter;
   }
 
-  public handleClearTodo(filter: FilterType ): void {
+  public async handleClearTodo(filter: FilterType ) {
     // const todos = this.todosSubject.getValue();
-    const todos = this.store.selectSnapshot('todos') || [];
+    const todos = await getCurrentValue(this.store, TodoSelectors.selectAllTodos) || []; // get current value in state
+    console.log("clear todos", todos)
     const clearTodos = todos.filter(this.filters[filter]);
     const clearIds = clearTodos.map(clearTodos => clearTodos.id);
     const restTodos = todos.filter(todo => !clearIds.includes(todo.id)) || [];
-    this.service.clearTodos(clearTodos)
-    .subscribe(returnTodos => {
-        // this.todosSubject.next([...restTodos])
-        this.store.update({todos: restTodos}); // or using _.cloneDeep()
-        this.snackbar.open(`Clear successfully`, undefined, {duration: 2000});
+    this.store.dispatch(clearCompletedTodoAsync.request({todos: clearTodos}));
 
-    })
+    // TODO subcribe on status observable??? in ngOnInit???
+    let subcription = this.statusClearCompleted$.pipe(
+      rxFilter((status : Status) => status.status === 'success'),
+      take(1),
+      finalize(() => {subcription.unsubscribe()})
+      )
+      .subscribe((status) => {
+        this.snackbar.open(`Clear successfully`, undefined, {duration: 2000});
+      })
+
   }
 
 }

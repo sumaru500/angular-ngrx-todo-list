@@ -7,6 +7,11 @@ import { HeaderComponent } from './components/header/header.component';
 import { FooterComponent } from './components/footer/footer.component';
 import { TodoItemComponent } from './components/todo-item/todo-item.component';
 import { TodoListComponent } from './components/todo-list/todo-list.component';
+import { StoreModule } from '@ngrx/store';
+import { EffectsModule } from '@ngrx/effects';
+
+import todoReducer from './state/todo.reducer';
+import { TodoEffects } from './state/todo.effects';
 
 
 
@@ -22,6 +27,8 @@ import { TodoListComponent } from './components/todo-list/todo-list.component';
     CommonModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    StoreModule.forFeature("todo", todoReducer),
+    EffectsModule.forFeature([TodoEffects]),
   ],
   exports: [
     TodoPageComponent

@@ -1,5 +1,5 @@
-import { Todo } from "./todo";
+import { TodoState } from "./todo/todo.state.model";
 
 export interface State {
-  todos: Todo[],
+  todo: TodoState,
 }

@@ -35,6 +35,9 @@
       "~core/api": [
         "src/app/core/services/api"
       ],
+      "~core/common/util": [
+        "src/app/core/common/util"
+      ],
       "~core/util": [
         "src/app/core/services/util"
       ],
